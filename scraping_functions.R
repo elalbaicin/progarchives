@@ -75,45 +75,69 @@ extract_albums <- function(url_artist){
                            encoding = "ISO-8859-1")
   
   # Extraia os nós com as tabelas de álbuns
-  node_albums <- artist_page %>% 
-    html_nodes(xpath = '//*[@id="main"]/div/div[*]/table[*]')
+  nodes_albums <- pmap(.l = list(xpath = paste0('//*[@id="main"]/div/div[*]/table[', 1:5, ']')),
+                       .f = html_node,
+                       x = artist_page)
+  
+  # Conte quantos elementos há em cada nó
+  td_count <- nodes_albums %>% 
+    map(.f = html_nodes,
+        xpath = "td") %>% 
+    map_int(length)
   
   # Se não houver discos registrados, tente um XPath diferente
-  if(length(node_albums) == 0){
+  if(all(td_count == 0)){
     
-    node_albums <- artist_page %>% 
-      html_nodes(xpath = '//*[@id="main"]/div[*]/table[*]')
+    nodes_albums <- pmap(.l = list(xpath = paste0('//*[@id="main"]/div[*]/table[', 1:5, ']')),
+                         .f = html_node,
+                         x = artist_page)
+    
+    td_count <- nodes_albums %>% 
+      map(.f = html_nodes,
+          xpath = "td") %>% 
+      map_int(length)
     
   }
   
   # Se ainda não houver discos registrados, interrompa a função
-  if(length(node_albums) == 0){
+  if(all(td_count == 0)){
     
     stop(paste0("Artista sem discos registrados. Vide ", url_artist))
     
   }
   
-  # Extraia as notas médias, o número de avaliações e os anos
-  suppressWarnings(data_albums <- node_albums %>% 
-                     html_nodes(css = "span") %>% 
-                     html_text() %>% 
-                     as.numeric() %>% 
-                     .[which(x = !is.na(.))] %>% 
-                     matrix(nrow = length(.) / 3,
-                            ncol = 3,
-                            byrow = TRUE) %>% 
-                     as_tibble(.name_repair = "minimal") %>% 
-                     set_names(nm = c("avg_rating",
-                                      "n_ratings",
-                                      "year")))
+  # Extraia o tipo, as notas médias, o número de avaliações e os anos
+  data_albums <- nodes_albums %>% 
+    map2_df(.y = list("Studio Album",
+                      "Live",
+                      "DVD/Video",
+                      "Boxset/Compilation",
+                      "Singles/EPs/Fan Club/Promo"),
+            .f = ~ html_nodes(.x,
+                              css = "span") %>% 
+              html_text() %>% 
+              as.numeric() %>% 
+              na.omit() %>% 
+              matrix(nrow = length(.) / 3,
+                     ncol = 3,
+                     byrow = TRUE) %>% 
+              as_tibble(.name_repair = "minimal") %>% 
+              set_names(nm = c("avg_rating",
+                               "n_ratings",
+                               "year")) %>% 
+              mutate(type = .y))
   
   # Nomes, anos e URLs dos álbuns
-  meta_albums <- tibble(album = node_albums %>% 
-                          html_nodes(css = "strong") %>% 
-                          html_text(),
-                        url_album = node_albums %>% 
-                          html_nodes(css = "a:nth-child(1)") %>% 
-                          html_attr("href") %>% 
+  meta_albums <- tibble(album = nodes_albums %>% 
+                          map(.f = ~ html_nodes(.x,
+                                                css = "strong") %>% 
+                                html_text) %>% 
+                          unlist(),
+                        url_album = nodes_albums %>% 
+                          map(.f = ~ html_nodes(.x,
+                                                css = "a:nth-child(1)") %>% 
+                                html_attr("href")) %>% 
+                          unlist() %>% 
                           paste0("http://www.progarchives.com/", .))
   
   # Reúna os resultados em um único dataframe
@@ -131,13 +155,16 @@ extract_albums <- function(url_artist){
   
 }
 
-# Extração dos tipos de álbum ---------------------------------------------
+# EM CONSTRUÇÃO - Extração de informações do álbum ------------------------
 
 extract_album_info <- function(url_album){
   
+  # Carregue a página
+  album_page <- url_album %>%
+    read_html(encoding = "ISO-8859-1")
+  
   # Carregue a página e localize a tabela com informações do lançamento
-  album_table <- url_album %>%
-    read_html(encoding = "ISO-8859-1") %>% 
+  album_table <- album_page %>% 
     html_node(xpath = '//*[@id="main"]/div[1]/div[2]/table')
   
   # Extraia o tipo de lançamento da tabela e remova detalhes redundantes
@@ -146,9 +173,27 @@ extract_album_info <- function(url_album){
     html_text() %>% 
     str_remove(pattern = ", released in " %R% repeated(DGT, lo = 4, hi = 4))
   
+  # Distribuição (não ponderada) da nota
+  stars <- album_page %>% 
+    html_nodes(xpath = '//*[@id="main"]/div[1]/div[2]/blockquote/div[*]/div') %>% 
+    html_attr("style") %>% 
+    str_extract(pattern = lookbehind(":") %R%
+                  one_or_more(DGT,
+                              char_class = FALSE) %R% 
+                  lookahead("%" %R% END)) %>% 
+    as.numeric(.) / 100 %>% 
+    matrix(ncol = 5) %>% 
+    as_tibble(.name_repair = "minimal") %>% 
+    set_names(nm = c("rate_5",
+                     "rate_4",
+                     "rate_3",
+                     "rate_2",
+                     "rate_1"))
+  
   # Crie um dataframe com a URL do lançamento e seu tipo
   info <- tibble(url_album = url_album,
-                 type = type)
+                 type = type) %>% 
+    bind_cols(stars)
   
   # Entregue o resultado
   return(info)

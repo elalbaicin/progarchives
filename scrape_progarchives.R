@@ -31,17 +31,6 @@ albums <- artists$url_artist %>%
              .progress = TRUE) %>% 
   map_df(.f = ~ .x$result)
 
-# Tome o tipo de lançamento de cada álbum
-album_type <- albums$url_album %>% 
-  future_map(.f = extract_album_info,
-             .progress = TRUE) %>% 
-  map_df(.f = ~ .x)
-
-# Adicione a coluna de tipo ao dataframe de álbuns
-albums <- albums %>% 
-  left_join(album_type,
-            by = "url_album")
-
 # Dataframe principal
 main <- artists %>% 
   left_join(albums,
