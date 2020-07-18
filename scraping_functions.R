@@ -102,7 +102,11 @@ extract_albums <- function(url_artist){
   # Se ainda não houver discos registrados, interrompa a função
   if(all(td_count == 0)){
     
-    stop(paste0("Artista sem discos registrados. Vide ", url_artist))
+    # Avise que o artista não tem discos registrados
+    warning(paste0("Artista sem discos registrados. Vide ", url_artist))
+    
+    # Entregue NULL
+    return(NULL)
     
   }
   
@@ -127,7 +131,7 @@ extract_albums <- function(url_artist){
                                "year")) %>% 
               mutate(type = .y))
   
-  # Nomes, anos e URLs dos álbuns
+  # Nomes e URLs dos álbuns
   meta_albums <- tibble(album = nodes_albums %>% 
                           map(.f = ~ html_nodes(.x,
                                                 css = "strong") %>% 
@@ -159,41 +163,52 @@ extract_albums <- function(url_artist){
 
 extract_album_info <- function(url_album){
   
-  # Carregue a página
-  album_page <- url_album %>%
+  # Carregue a página de avaliações/notas
+  review_page <- url_album %>%
+    str_replace(pattern = "album",
+                replacement = "album-reviews") %>% 
     read_html(encoding = "ISO-8859-1")
   
-  # Carregue a página e localize a tabela com informações do lançamento
-  album_table <- album_page %>% 
-    html_node(xpath = '//*[@id="main"]/div[1]/div[2]/table')
+  # Tabela de avaliações
+  review_table <- review_page %>% 
+    html_nodes(xpath = '//*[@id="main"]/div[2]/div[2]')
   
-  # Extraia o tipo de lançamento da tabela e remova detalhes redundantes
-  type <- album_table %>% 
-    html_node(css = "td:nth-child(2) > strong") %>% 
-    html_text() %>% 
-    str_remove(pattern = ", released in " %R% repeated(DGT, lo = 4, hi = 4))
+  # Avaliações
+  reviews <- tibble(collaborator = review_table %>% 
+                      html_nodes(xpath = '//*[@id="main"]/div[2]/div[2]/div[*]/div[1]') %>% 
+                      html_text() %>% 
+                      str_remove_all(pattern = or(START %R% repeated("\n", lo = 1, hi = 5),
+                                                  repeated("\n", lo = 1, hi = 5) %R% END)) %>% 
+                      str_split(pattern = "\n") %>% 
+                      map_lgl(.f = ~ !is.na(.x[2])),
+                    stars = review_table %>% 
+                      html_nodes(xpath = '//*[@id="main"]/div[2]/div[2]/div[*]/div[2]/img') %>% 
+                      html_attr("alt") %>% 
+                      str_remove(pattern = " stars") %>% 
+                      as.numeric()) %>% 
+    mutate(weight = ifelse(collaborator,
+                           yes = 20,
+                           no = 10))
   
-  # Distribuição (não ponderada) da nota
-  stars <- album_page %>% 
-    html_nodes(xpath = '//*[@id="main"]/div[1]/div[2]/blockquote/div[*]/div') %>% 
-    html_attr("style") %>% 
-    str_extract(pattern = lookbehind(":") %R%
-                  one_or_more(DGT,
-                              char_class = FALSE) %R% 
-                  lookahead("%" %R% END)) %>% 
-    as.numeric(.) / 100 %>% 
-    matrix(ncol = 5) %>% 
-    as_tibble(.name_repair = "minimal") %>% 
-    set_names(nm = c("rate_5",
-                     "rate_4",
-                     "rate_3",
-                     "rate_2",
-                     "rate_1"))
+  # Notas
+  ratings <- tibble(stars = review_page %>% 
+    html_nodes(xpath = '//*[@id="main"]/div[2]/div[2]/ul/li[*]/img') %>% 
+    html_attr("alt") %>% 
+    str_remove(pattern = " stars") %>% 
+    as.numeric()) %>% 
+    mutate(weight = 1)
   
   # Crie um dataframe com a URL do lançamento e seu tipo
-  info <- tibble(url_album = url_album,
-                 type = type) %>% 
-    bind_cols(stars)
+  info <- bind_rows(reviews,
+                    ratings) %>% 
+    mutate(url_album = url_album) %>% 
+    select(url_album,
+           everything()) %>% 
+    count(url_album,
+          collaborator,
+          weight,
+          stars,
+          name = "count")
   
   # Entregue o resultado
   return(info)

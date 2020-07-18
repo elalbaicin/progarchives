@@ -27,13 +27,19 @@ artists <- genres$url_genre %>%
 
 # Tome os lançamentos de cada artista
 albums <- artists$url_artist %>% 
-  future_map(.f = safely(extract_albums),
+  future_map(.f = extract_albums,
              .progress = TRUE) %>% 
-  map_df(.f = ~ .x$result)
+  map_df(.f = ~ .x)
+
+# Tome a distribuição das notas por lançamento
+album_info <- albums$url_album %>% 
+  future_map(.f = extract_album_info,
+             .progress = TRUE) %>% 
+  map_df(.f = ~ .x)
 
 # Dataframe principal
-main <- artists %>% 
-  left_join(albums,
+main <- albums %>% 
+  left_join(artists,
             by = "url_artist")
 
 # Salve os dados
