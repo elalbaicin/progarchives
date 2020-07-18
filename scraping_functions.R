@@ -161,7 +161,7 @@ extract_albums <- function(url_artist){
 
 # EM CONSTRUÇÃO - Extração de informações do álbum ------------------------
 
-extract_album_info <- function(url_album){
+extract_ratings <- function(url_album){
   
   # Carregue a página de avaliações/notas
   review_page <- url_album %>%

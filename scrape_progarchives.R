@@ -32,8 +32,8 @@ albums <- artists$url_artist %>%
   map_df(.f = ~ .x)
 
 # Tome a distribuição das notas por lançamento
-album_info <- albums$url_album %>% 
-  future_map(.f = extract_album_info,
+ratings <- albums$url_album %>% 
+  future_map(.f = extract_ratings,
              .progress = TRUE) %>% 
   map_df(.f = ~ .x)
 
