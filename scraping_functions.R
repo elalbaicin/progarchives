@@ -26,11 +26,6 @@ extract_artists <- function(url_genre){
   genre_page <- read_html(url_genre,
                           encoding = "ISO-8859-1")
   
-  # Identifique o subgênero
-  genre <- genres[genres$url_genre == url_genre, "genre"] %>% 
-    unlist() %>% 
-    unique()
-  
   # Extraia o nó com a tabela de artistas
   node_artists <- genre_page %>% 
     html_node(xpath = '//*[@id="main"]/div[2]/table[3]')
@@ -55,9 +50,7 @@ extract_artists <- function(url_genre){
     as_tibble(.name_repair = "minimal") %>% 
     row_to_names(row_number = 1) %>% 
     clean_names() %>% 
-    transmute(date = today(),
-              genre = genre,
-              artist = bands_artists,
+    transmute(artist = bands_artists,
               country,
               url_artist = urls_artists)
   
@@ -147,11 +140,10 @@ extract_albums <- function(url_artist){
   # Reúna os resultados em um único dataframe
   albums_df <- bind_cols(meta_albums,
                          data_albums) %>% 
-    mutate(url_artist = url_artist) %>% 
-    select(url_artist,
-           url_album,
+    select(url_album,
            album,
            year,
+           type,
            everything())
   
   # Entregue o resultado
@@ -162,6 +154,13 @@ extract_albums <- function(url_artist){
 # EM CONSTRUÇÃO - Extração de informações do álbum ------------------------
 
 extract_ratings <- function(url_album){
+  
+  # Caso a URL seja indefinida, entregue NA
+  if(is.na(url_album)){
+    
+    return(NULL)
+    
+  }
   
   # Carregue a página de avaliações/notas
   review_page <- url_album %>%
@@ -201,11 +200,7 @@ extract_ratings <- function(url_album){
   # Crie um dataframe com a URL do lançamento e seu tipo
   info <- bind_rows(reviews,
                     ratings) %>% 
-    mutate(url_album = url_album) %>% 
-    select(url_album,
-           everything()) %>% 
-    count(url_album,
-          collaborator,
+    count(collaborator,
           weight,
           stars,
           name = "count")
