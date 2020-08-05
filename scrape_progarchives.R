@@ -29,8 +29,7 @@ main <- main %>%
                                  .f = extract_albums,
                                  .progress = TRUE)) %>% 
   unnest(cols = c(album_data),
-         keep_empty = TRUE) %>% 
-  remove_empty(which = "cols")
+         keep_empty = TRUE)
 
 # # Tome a distribuição da notas de cada lançamento - o processo é demorado
 # main <- main %>%
@@ -38,8 +37,7 @@ main <- main %>%
 #                               .f = extract_ratings,
 #                               .progress = TRUE)) %>%
 #   unnest(cols = c(ratings),
-#          keep_empty = TRUE) %>%
-#   remove_empty(which = "cols")
+#          keep_empty = TRUE)
 
 # Salve os dados
 save(main,
