@@ -44,14 +44,13 @@ extract_artists <- function(url_genre){
     html_attr("href") %>% 
     paste0("http://www.progarchives.com/", .)
   
-  # Forme a tabela completa de artistas
+  # Forme a tabela de país e URL - o nome do artista virá da página própria
   artists <- node_artists %>% 
     html_table() %>% 
     as_tibble(.name_repair = "minimal") %>% 
     row_to_names(row_number = 1) %>% 
     clean_names() %>% 
-    transmute(artist = bands_artists,
-              country,
+    transmute(country,
               url_artist = urls_artists)
   
   # Entregue o resultado
@@ -67,8 +66,18 @@ extract_albums <- function(url_artist){
   artist_page <- read_html(url_artist,
                            encoding = "ISO-8859-1")
   
+  # Nome do artista
+  artist_name <- artist_page %>% 
+    html_node(xpath = '//*[@id="main"]/div/div[2]/div[3]') %>%
+    html_node(css = "strong") %>% 
+    html_text() %>% 
+    str_remove(pattern = " biography")
+  
+  # Nós com as tabelas de álbuns
+  table_nodes <- paste0('//*[@id="main"]/div/div[*]/table[', 1:5, ']')
+  
   # Extraia os nós com as tabelas de álbuns
-  nodes_albums <- pmap(.l = list(xpath = paste0('//*[@id="main"]/div/div[*]/table[', 1:5, ']')),
+  nodes_albums <- pmap(.l = list(xpath = table_nodes),
                        .f = html_node,
                        x = artist_page)
   
@@ -81,7 +90,9 @@ extract_albums <- function(url_artist){
   # Se não houver discos registrados, tente um XPath diferente
   if(all(td_count == 0)){
     
-    nodes_albums <- pmap(.l = list(xpath = paste0('//*[@id="main"]/div[*]/table[', 1:5, ']')),
+    table_nodes <- paste0('//*[@id="main"]/div[*]/table[', 1:5, ']')
+    
+    nodes_albums <- pmap(.l = list(xpath = table_nodes),
                          .f = html_node,
                          x = artist_page)
     
@@ -95,11 +106,14 @@ extract_albums <- function(url_artist){
   # Se ainda não houver discos registrados, interrompa a função
   if(all(td_count == 0)){
     
+    # Crie um dataframe com o nome do artista
+    albums_df <- tibble(artist = artist_name)
+    
     # Avise que o artista não tem discos registrados
     warning(paste0("Artista sem discos registrados. Vide ", url_artist))
     
-    # Entregue NULL
-    return(NULL)
+    # Entregue o dataframe simplificado
+    return(albums_df)
     
   }
   
@@ -140,7 +154,9 @@ extract_albums <- function(url_artist){
   # Reúna os resultados em um único dataframe
   albums_df <- bind_cols(meta_albums,
                          data_albums) %>% 
-    select(url_album,
+    mutate(artist = artist_name) %>% 
+    select(artist,
+           url_album,
            album,
            year,
            type,
