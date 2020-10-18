@@ -26,17 +26,15 @@ extract_artists <- function(url_genre){
   genre_page <- read_html(url_genre,
                           encoding = "ISO-8859-1")
   
-  # Extraia o nó com a tabela de artistas
-  node_artists <- genre_page %>% 
-    html_node(xpath = '//*[@id="main"]/div[2]/table[3]')
+  # Extraia os nós que podem conter a tabela de artistas
+  main_nodes <- genre_page %>% 
+    html_nodes(xpath = '//*[@id="main"]/div[*]/table[*]')
   
-  # Caso o nó solicitado não exista, procure o substituto
-  if(length(node_artists) == 0){
-    
-    node_artists <- genre_page %>% 
-      html_node(xpath = '//*[@id="main"]/div[2]/table[2]')
-    
-  }
+  # Identifique e extraia a tabela de artistas;
+  # aquela que tiver o atributo "width" definido
+  node_artists <- keep(.x = main_nodes,
+                       .p = !is.na(html_attr(main_nodes,
+                                             "width")))
   
   # Extraia as URLs de cada artista
   urls_artists <- node_artists %>% 
@@ -47,7 +45,7 @@ extract_artists <- function(url_genre){
   # Forme a tabela de país e URL - o nome do artista virá da página própria
   artists <- node_artists %>% 
     html_table() %>% 
-    as_tibble(.name_repair = "minimal") %>% 
+    pluck(1) %>% 
     row_to_names(row_number = 1) %>% 
     clean_names() %>% 
     transmute(country,
