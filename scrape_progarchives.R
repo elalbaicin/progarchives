@@ -11,6 +11,9 @@ suppressPackageStartupMessages(library(rebus))
 # Opção de paralelismo do pacote furrr
 plan(multiprocess)
 
+# Carregue as funções coletoras
+source("scraping_functions.R")
+
 # Extração dos dados ------------------------------------------------------
 
 # Identifique os subgêneros e suas URLs
@@ -18,15 +21,15 @@ main <- extract_genres()
 
 # Tome os artistas de cada subgênero e suas URLs
 main <- main %>% 
-  mutate(artist_data = future_map(.x = url_genre,
-                                  .f = extract_artists,
-                                  .progress = TRUE)) %>% 
+  mutate(artist_data = map(.x = url_genre,
+                           .f = extract_artists)) %>% 
   unnest(cols = c(artist_data))
 
 # Tome os lançamentos de cada artista
 main <- main %>% 
   mutate(album_data = future_map(.x = url_artist,
-                                 .f = extract_albums,
+                                 .f = insistently(extract_albums,
+                                                  rate = rate_backoff()),
                                  .progress = TRUE)) %>% 
   unnest(cols = c(album_data),
          keep_empty = TRUE)
@@ -34,7 +37,7 @@ main <- main %>%
 # # Tome a distribuição da notas de cada lançamento - o processo é demorado
 # main <- main %>%
 #   mutate(ratings = future_map(.x = url_album,
-#                               .f = extract_ratings,
+#                               .f = insistently(extract_ratings),
 #                               .progress = TRUE)) %>%
 #   unnest(cols = c(ratings),
 #          keep_empty = TRUE)
